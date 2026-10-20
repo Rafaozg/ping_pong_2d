@@ -4,8 +4,8 @@ import config   # Importamos la configuracion.
 # Funcion: Guarda el resultado de un partido de Ping Pong.
 def guardar_partida(tipo, j1, puntos1, j2, puntos2, ganador):
     try:
-        # Abrimos el archivo en modo 'append' (agregar al final).
-        archivo = open(config.ARCHIVO, mode='a', newline='')
+        # Abrimos el archivo en modo 'append' (agregar al final) con soporte UTF-8.
+        archivo = open(config.ARCHIVO, mode='a', newline='', encoding='utf-8')
         
         # Creamos la herramienta para escribir.
         escritor = csv.writer(archivo)
@@ -15,16 +15,16 @@ def guardar_partida(tipo, j1, puntos1, j2, puntos2, ganador):
         
         # Cerramos el archivo para asegurar el guardado.
         archivo.close()
-    except:
+    except Exception as e:
         # Si falla, mostramos error en consola.
-        print("Error guardando datos")
+        print("Error guardando datos:", e)
 
 # Funcion: Lee el historial filtrando por tipo (Amistoso o Torneo).
 def leer_historial(tipo_base):
     lista = [] # Lista vacia para guardar los partidos encontrados.
     try:
         # Abrimos en modo lectura ('r').
-        archivo = open(config.ARCHIVO, mode='r')
+        archivo = open(config.ARCHIVO, mode='r', encoding='utf-8')
         lector = csv.reader(archivo)
         
         # Leemos linea por linea.
@@ -38,9 +38,9 @@ def leer_historial(tipo_base):
                     dato = {
                         "evento": fila[0],
                         "jugador1": fila[1],
-                        "puntos1": fila[2], # Antes goles, ahora puntos
+                        "puntos1": fila[2],
                         "jugador2": fila[3],
-                        "puntos2": fila[4], # Antes goles, ahora puntos
+                        "puntos2": fila[4],
                         "ganador": fila[5]
                     }
                     lista.append(dato)
@@ -53,7 +53,7 @@ def leer_historial(tipo_base):
 # Funcion: Calcula el numero siguiente para el evento (ej. Torneo 2 -> 3).
 def obtener_siguiente_numero(palabra_clave):
     try:
-        archivo = open(config.ARCHIVO, mode='r')
+        archivo = open(config.ARCHIVO, mode='r', encoding='utf-8')
         lector = csv.reader(archivo)
         maximo_numero = 0 
         
@@ -76,7 +76,7 @@ def obtener_siguiente_numero(palabra_clave):
 # Funcion: Cuenta jugadores unicos usando un CONJUNTO (Set).
 def contar_jugadores_unicos():
     try:
-        archivo = open(config.ARCHIVO, mode='r')
+        archivo = open(config.ARCHIVO, mode='r', encoding='utf-8')
         lector = csv.reader(archivo)
         conjunto = set() # Set elimina duplicados automaticamente.
         
@@ -90,8 +90,11 @@ def contar_jugadores_unicos():
     except:
         return 0
 
-# Funcion: Borra todo el historial.
+# Funcion: Borra todo el historial de forma segura.
 def borrar_todo():
-    # 'w' borra todo el contenido al abrir.
-    archivo = open(config.ARCHIVO, mode='w')
-    archivo.close()
+    try:
+        # 'w' borra todo el contenido al abrir.
+        archivo = open(config.ARCHIVO, mode='w', encoding='utf-8')
+        archivo.close()
+    except Exception as e:
+        print("Error borrando datos:", e)

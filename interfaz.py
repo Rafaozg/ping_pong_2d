@@ -11,7 +11,8 @@ class VentanaJuego:
         self.ventana = ventana_principal
         self.ventana.title("PING PONG 2D") # Titulo de la ventana.
         
-        # --- PANTALLA COMPLETA ---
+        # --- PANTALLA COMPLETA COMPATIBLE CON WSL Y WINDOWS ---
+        self.ventana.update_idletasks()
         ancho_monitor = self.ventana.winfo_screenwidth()
         alto_monitor = self.ventana.winfo_screenheight()
         
@@ -19,7 +20,7 @@ class VentanaJuego:
         config.ANCHO = ancho_monitor
         config.ALTO = alto_monitor
         
-        self.ventana.geometry(f"{config.ANCHO}x{config.ALTO}")
+        self.ventana.geometry(f"{config.ANCHO}x{config.ALTO}+0+0")
         self.ventana.attributes('-fullscreen', True)
         self.ventana.bind("<Escape>", lambda event: self.ventana.destroy())
         
@@ -43,8 +44,14 @@ class VentanaJuego:
 
         self.crear_menu()
         
-        # Canvas sin bordes.
-        self.canvas = Canvas(self.ventana, width=config.ANCHO, height=config.ALTO, highlightthickness=0)
+        # Canvas sin bordes y con fondo oscuro explicito para evitar color blanco en WSL.
+        self.canvas = Canvas(
+            self.ventana,
+            width=config.ANCHO,
+            height=config.ALTO,
+            highlightthickness=0,
+            bg=config.COLOR_FONDO
+        )
 
     # --- MENUS ---
 
@@ -198,12 +205,18 @@ class VentanaJuego:
     # --- JUEGO (MESA DE PING PONG) ---
 
     def preparar_partido(self):
+        self.canvas.configure(bg=config.COLOR_FONDO)
         self.canvas.pack(fill=BOTH, expand=True)
+        self.canvas.focus_set()
+        
         self.puntos1 = 0
         self.puntos2 = 0
-        self.punto_oro_activo = False # Variable corregida para Ping Pong
+        self.punto_oro_activo = False
         
         self.canvas.delete("all")
+        
+        # Fondo oscuro de la cancha (garantiza que no se vea blanco en ningún tema de Linux)
+        self.canvas.create_rectangle(0, 0, config.ANCHO, config.ALTO, fill=config.COLOR_FONDO, outline="")
         
         # Paredes blancas
         self.canvas.create_rectangle(0, 0, config.ANCHO, config.GROSOR_PARED, fill=config.COLOR_LINEAS, outline="")
@@ -253,7 +266,7 @@ class VentanaJuego:
             
             # Solo actualizamos el reloj si NO es punto decisivo
             if not self.punto_oro_activo:
-                self.canvas.itemconfig(self.txt_tiempo, text=f"{m}:{s}")
+                self.canvas.itemconfig(self.txt_tiempo, text=f"{m}:{s:02d}")
             
             # --- LOGICA EMPATE / PUNTO DE ORO ---
             if restante <= 0 and not self.punto_oro_activo:
@@ -381,12 +394,12 @@ class VentanaJuego:
         ttk.Button(top, text="BORRAR", command=borrar).pack()
 
     def llenar_tabla(self, frame, tipo):
-        cols = ("EVENTO", "J1", "PUNTOS", "J2", "GANADOR") # Cabecera actualizada
+        cols = ("EVENTO", "J1", "PUNTOS", "J2", "GANADOR")
         tabla = ttk.Treeview(frame, columns=cols, show="headings")
         
         tabla.heading("EVENTO", text="Evento"); tabla.column("EVENTO", width=80)
         tabla.heading("J1", text="J1"); tabla.column("J1", width=80)
-        tabla.heading("PUNTOS", text="Puntos"); tabla.column("PUNTOS", width=50) # Antes Goles
+        tabla.heading("PUNTOS", text="Puntos"); tabla.column("PUNTOS", width=50)
         tabla.heading("J2", text="J2"); tabla.column("J2", width=80)
         tabla.heading("GANADOR", text="Ganador"); tabla.column("GANADOR", width=80)
         tabla.pack(fill='both', expand=True)

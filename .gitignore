@@ -1,0 +1,20 @@
+# Caché de Python y archivos compilados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales (Windows y WSL/Linux)
+.venv/
+venv/
+env/
+ENV/
+
+# Historial de partidas locales generadas al jugar
+partidos_resultados.csv
+ping_pong_2d/partidos_resultados.csv
+
+# Configuraciones del editor y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
