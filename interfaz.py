@@ -526,16 +526,18 @@ class Juego:
 
         vel = math.hypot(self.dx, self.dy) * config.ACELERACION
         vel = min(vel, config.VELOCIDAD_MAX)
-        self.dx = vel * math.cos(angulo) * direccion
-        self.dy = vel * math.sin(angulo) + vy_pala * 0.4  # Spin segun movimiento de la pala.
-        self.dy = max(-config.VELOCIDAD_MAX, min(config.VELOCIDAD_MAX, self.dy))
+        dx = vel * math.cos(angulo) * direccion
+        dy = vel * math.sin(angulo) + vy_pala * 0.4  # Spin segun movimiento de la pala.
 
-        # El spin no debe superar el tope de velocidad total.
-        velocidad_total = math.hypot(self.dx, self.dy)
-        if velocidad_total > config.VELOCIDAD_MAX:
-            escala = config.VELOCIDAD_MAX / velocidad_total
-            self.dx *= escala
-            self.dy *= escala
+        # Renormalizamos a 'vel': el spin solo cambia la DIRECCION y nunca
+        # resta velocidad. Cada golpe mantiene o acelera, jamas frena.
+        magnitud = math.hypot(dx, dy)
+        if magnitud > 0:
+            self.dx = dx * vel / magnitud
+            self.dy = dy * vel / magnitud
+        else:
+            self.dx = vel * direccion
+            self.dy = 0.0
 
         # Sacamos la pelota del interior de la pala para evitar rebotes dobles.
         if direccion > 0:
