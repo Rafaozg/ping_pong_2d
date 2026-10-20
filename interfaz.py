@@ -324,6 +324,16 @@ class Juego:
         self.ganadores = []
         self._crear_versus()
 
+    def _drw_torneo(self, raton):
+        cx = config.ANCHO // 2
+        cy = config.ALTO // 2
+        self._texto("TORNEO", self.f_titulo, "white", (cx, cy - 180))
+        self._texto("COPA (4 EQUIPOS)", self.f_sub, COLOR_AMARILLO, (cx, cy - 120))
+        for c in self.cajas:
+            c.dibujar(self.pantalla)
+        self.btn_iniciar.dibujar(self.pantalla, raton)
+        self.btn_atras.dibujar(self.pantalla, raton)
+
     # --- VERSUS (entre partidos de torneo) ---
 
     def _crear_versus(self):
@@ -371,10 +381,9 @@ class Juego:
 
         self.dx = config.VELOCIDAD_PELOTA
         self.dy = config.VELOCIDAD_PELOTA
-        self._centrar_pelota()
-
         self.estela = deque(maxlen=10)
         self.shake_amp, self.shake_ticks = 0.0, 0
+        self._centrar_pelota()
         self._iniciar_cuenta()
 
     def _centrar_pelota(self):
@@ -520,6 +529,13 @@ class Juego:
         self.dx = vel * math.cos(angulo) * direccion
         self.dy = vel * math.sin(angulo) + vy_pala * 0.4  # Spin segun movimiento de la pala.
         self.dy = max(-config.VELOCIDAD_MAX, min(config.VELOCIDAD_MAX, self.dy))
+
+        # El spin no debe superar el tope de velocidad total.
+        velocidad_total = math.hypot(self.dx, self.dy)
+        if velocidad_total > config.VELOCIDAD_MAX:
+            escala = config.VELOCIDAD_MAX / velocidad_total
+            self.dx *= escala
+            self.dy *= escala
 
         # Sacamos la pelota del interior de la pala para evitar rebotes dobles.
         if direccion > 0:
