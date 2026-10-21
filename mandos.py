@@ -93,13 +93,16 @@ class Mandos:
             except Exception:
                 ctrl = None
         # Leer estado inicial del eje Y para calibrar el centro (evita drift al conectar).
+        # Los mandos PS3 suelen reportar ±1.0 al conectar; solo usamos el valor
+        # si está cerca del centro real (|v| < 0.2), si no, offset = 0.
         try:
             if ctrl is not None:
-                # GameController: el eje ya viene normalizado [-1,1]
                 eje_y_inicial = ctrl.get_axis(pygame.CONTROLLER_AXIS_LEFTY)
             else:
                 eje_y_inicial = joy.get_axis(config.MANDO_EJE_Y)
         except Exception:
+            eje_y_inicial = 0.0
+        if abs(eje_y_inicial) >= 0.2:
             eje_y_inicial = 0.0
         self._alta(joy.get_name(), iid, joy, ctrl, eje_y_inicial)
 
