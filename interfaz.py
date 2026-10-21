@@ -20,6 +20,14 @@ COLOR_AZUL = "#17a2b8"
 COLOR_ROJO = "#dc3545"
 COLOR_GRIS = "#6c757d"
 
+# --- PODERES (nombre corto y color de cada habilidad) ---
+PODERES = {
+    "congelar": ("CONG", "#22d3ee"),
+    "lentitud": ("LENT", "#a855f7"),
+    "rapidez": ("RAP", "#22c55e"),
+    "reduccion": ("REC", "#f97316"),
+}
+
 
 # Genera un beep simple (16-bit mono) sin usar numpy ni archivos externos.
 def _generar_sonido(frecuencia, duracion_ms, volumen=0.35):
@@ -108,6 +116,8 @@ class Juego:
             self.snd_punto = _generar_sonido(660, 150)
             self.snd_cuenta = _generar_sonido(300, 80, 0.25)
             self.snd_oro = _generar_sonido(880, 250)
+            self.snd_poder = _generar_sonido(600, 120, 0.3)
+            self.snd_activar = _generar_sonido(760, 180, 0.3)
             self.audio_ok = True
         except pygame.error:
             pass
@@ -141,6 +151,8 @@ class Juego:
             "punto": self.snd_punto,
             "cuenta": self.snd_cuenta,
             "oro": self.snd_oro,
+            "poder": self.snd_poder,
+            "activar": self.snd_activar,
         }
         mapa[clave].play()
 
@@ -383,6 +395,15 @@ class Juego:
         self.dy = config.VELOCIDAD_PELOTA
         self.estela = deque(maxlen=10)
         self.shake_amp, self.shake_ticks = 0.0, 0
+
+        # Poderes por jugador (0=J1, 1=J2): en el campo, en la mano y activo.
+        self.campo_poder = [None, None]
+        self.poder_mano = [None, None]
+        self.poder_activo = [None, None]
+        self.poder_ms = [0.0, 0.0]
+        self.poder_spawn_ms = [random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000,
+                               random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000]
+
         self._centrar_pelota()
         self._iniciar_cuenta()
 
@@ -421,8 +442,13 @@ class Juego:
                 self.teclas["up"] = True
             elif e.key == pygame.K_DOWN:
                 self.teclas["down"] = True
-            elif e.key == pygame.K_RETURN and self.fin_partida:
-                self._siguiente()
+            elif e.key == pygame.K_q:
+                self._activar_poder(0)
+            elif e.key == pygame.K_RETURN:
+                if self.fin_partida:
+                    self._siguiente()
+                else:
+                    self._activar_poder(1)
         elif e.type == pygame.KEYUP:
             if e.key == pygame.K_w:
                 self.teclas["w"] = False
@@ -438,14 +464,32 @@ class Juego:
 
     def _upd_juego(self, dt):
         # Palas con movimiento continuo (se mueven tambien durante la cuenta).
-        vy1 = (int(self.teclas.get("s", False)) - int(self.teclas.get("w", False))) * config.VELOCIDAD_JUGADOR
-        vy2 = (int(self.teclas.get("down", False)) - int(self.teclas.get("up", False))) * config.VELOCIDAD_JUGADOR
+        # Velocidades con habilidades: rapidez propia y lentitud del rival.
+        vel1 = config.VELOCIDAD_JUGADOR
+        vel2 = config.VELOCIDAD_JUGADOR
+        if self.poder_activo[0] == "rapidez":
+            vel1 *= config.FACTOR_RAPIDEZ
+        if self.poder_activo[1] == "rapidez":
+            vel2 *= config.FACTOR_RAPIDEZ
+        if self.poder_activo[1] == "lentitud":
+            vel1 *= config.FACTOR_LENTITUD
+        if self.poder_activo[0] == "lentitud":
+            vel2 *= config.FACTOR_LENTITUD
+        vy1 = int((int(self.teclas.get("s", False)) - int(self.teclas.get("w", False))) * vel1)
+        vy2 = int((int(self.teclas.get("down", False)) - int(self.teclas.get("up", False))) * vel2)
         self.vy_pala1, self.vy_pala2 = vy1, vy2
+        # Reduccion: achica la pala del rival de quien la activo (conserva el centro).
+        alto1 = int(config.ALTO_PALA * (config.FACTOR_REDUCCION if self.poder_activo[1] == "reduccion" else 1))
+        alto2 = int(config.ALTO_PALA * (config.FACTOR_REDUCCION if self.poder_activo[0] == "reduccion" else 1))
+        for pala, alto in ((self.j1, alto1), (self.j2, alto2)):
+            if pala.h != alto:
+                centro = pala.centery
+                pala.h = alto
+                pala.centery = centro
         self.j1.y += vy1
         self.j2.y += vy2
-        limite_inf = config.ALTO - config.GROSOR_PARED - config.ALTO_PALA
-        self.j1.y = max(config.GROSOR_PARED, min(limite_inf, self.j1.y))
-        self.j2.y = max(config.GROSOR_PARED, min(limite_inf, self.j2.y))
+        self.j1.y = max(config.GROSOR_PARED, min(config.ALTO - config.GROSOR_PARED - self.j1.h, self.j1.y))
+        self.j2.y = max(config.GROSOR_PARED, min(config.ALTO - config.GROSOR_PARED - self.j2.h, self.j2.y))
 
         if self.fin_partida:
             return
@@ -478,13 +522,79 @@ class Juego:
                     self._terminar()
                 return
 
-        self.bx += self.dx
-        self.by += self.dy
-        self._colisiones()
-        self._actualizar_estela()
+        # Poderes: efectos activos, agarres y apariciones en el arco.
+        self._upd_poderes(dt)
+
+        # Congelar: la pelota permanece inmovil hasta agotar el efecto.
+        if "congelar" not in (self.poder_activo[0], self.poder_activo[1]):
+            self.bx += self.dx
+            self.by += self.dy
+            self._colisiones()
+            self._actualizar_estela()
 
     def _actualizar_estela(self):
         self.estela.append((self.bx + 10, self.by + 10))
+
+    # --- PODERES ---
+
+    def _duracion_poder(self, tipo):
+        return {
+            "congelar": config.DUR_CONGELAR * 1000,
+            "lentitud": config.DUR_LENTITUD * 1000,
+            "rapidez": config.DUR_RAPIDEZ * 1000,
+            "reduccion": config.DUR_REDUCCION * 1000,
+        }[tipo]
+
+    def _upd_poderes(self, dt):
+        for i in (0, 1):
+            # Enfriamiento del efecto activo (al agotarse queda libre la mano).
+            if self.poder_activo[i] is not None:
+                self.poder_ms[i] -= dt
+                if self.poder_ms[i] <= 0:
+                    self.poder_activo[i] = None
+                    self.poder_ms[i] = 0.0
+                continue
+
+            # Agarre: la pala que pase por encima se queda el poder.
+            if self.campo_poder[i] is not None:
+                pala = self.j1 if i == 0 else self.j2
+                if pala.colliderect(self.campo_poder[i]["rect"]):
+                    self.poder_mano[i] = self.campo_poder[i]["tipo"]
+                    self.campo_poder[i] = None
+                    self._sonar("poder")
+                    self._sacudir(3)
+                continue
+
+            # Con un poder en la mano sin activar no aparece otro.
+            if self.poder_mano[i] is not None:
+                continue
+
+            # Sin habilidad: cuenta para la siguiente aparicion aleatoria.
+            self.poder_spawn_ms[i] -= dt
+            if self.poder_spawn_ms[i] <= 0:
+                self._spawn_poder(i)
+                self.poder_spawn_ms[i] = random.uniform(config.SPAWN_PODER_MIN,
+                                                        config.SPAWN_PODER_MAX) * 1000
+
+    def _spawn_poder(self, i):
+        # En la columna de la pala, altura aleatoria dentro del arco.
+        pala = self.j1 if i == 0 else self.j2
+        lado = 46
+        radio = lado // 2
+        y = random.randint(config.GROSOR_PARED + radio,
+                           config.ALTO - config.GROSOR_PARED - radio)
+        rect = pygame.Rect(0, 0, lado, lado)
+        rect.center = (pala.centerx, y)
+        self.campo_poder[i] = {"rect": rect, "tipo": random.choice(list(PODERES))}
+
+    def _activar_poder(self, i):
+        if self.fin_partida or self.poder_mano[i] is None or self.poder_activo[i] is not None:
+            return
+        self.poder_activo[i] = self.poder_mano[i]
+        self.poder_mano[i] = None
+        self.poder_ms[i] = self._duracion_poder(self.poder_activo[i])
+        self._sonar("activar")
+        self._sacudir(4)
 
     def _colisiones(self):
         # Rebotes arriba/abajo.
@@ -520,7 +630,9 @@ class Juego:
     def _rebote_pala(self, pala, direccion, vy_pala):
         # Centros flotantes para un calculo estable del angulo.
         centro_pelota = self.by + 10
-        offset = (centro_pelota - pala.centery) / (config.ALTO_PALA / 2)
+        # Mitad de la pala REAL (puede estar reducida por el poder REC).
+        mitad_pala = max(1.0, pala.h / 2)
+        offset = (centro_pelota - pala.centery) / mitad_pala
         offset = max(-1.0, min(1.0, offset))
         angulo = offset * config.MAX_ANGULO
 
@@ -606,6 +718,19 @@ class Juego:
         pygame.draw.rect(fondo, config.COLOR_J1, (self.j1.x + ox, self.j1.y + oy, self.j1.w, self.j1.h))
         pygame.draw.rect(fondo, config.COLOR_J2, (self.j2.x + ox, self.j2.y + oy, self.j2.w, self.j2.h))
 
+        # Poderes esperando en el arco de cada jugador (pulso luminoso).
+        for i in (0, 1):
+            if self.campo_poder[i] is None:
+                continue
+            r = self.campo_poder[i]["rect"]
+            nombre, color = PODERES[self.campo_poder[i]["tipo"]]
+            pulso = 0.5 + 0.5 * math.sin(time.time() * 5)
+            radio = r.w // 2
+            pygame.draw.circle(fondo, color, (r.centerx + ox, r.centery + oy), radio + int(3 * pulso), 3)
+            pygame.draw.circle(fondo, "#0a0a0a", (r.centerx + ox, r.centery + oy), radio - 4)
+            img = self.f_peque.render(nombre, True, color)
+            fondo.blit(img, img.get_rect(center=(r.centerx + ox, r.centery + oy)))
+
         # Estela con alfa real (surface SRCALPHA).
         capa = pygame.Surface((config.ANCHO, config.ALTO), pygame.SRCALPHA)
         color_base = (255, 0, 0) if self.punto_oro else (255, 255, 255)
@@ -615,7 +740,13 @@ class Juego:
             pygame.draw.circle(capa, (*color_base, a), (int(x) + ox, int(y) + oy), 10)
         fondo.blit(capa, (0, 0))
 
-        pygame.draw.ellipse(fondo, config.COLOR_PUNTO_ORO if self.punto_oro else config.COLOR_BLANCO,
+        # Pelota congelada (poder CONG): tinte y halo de hielo.
+        congelada = "congelar" in (self.poder_activo[0], self.poder_activo[1])
+        color_pelota = PODERES["congelar"][1] if congelada else (
+            config.COLOR_PUNTO_ORO if self.punto_oro else config.COLOR_BLANCO)
+        if congelada:
+            pygame.draw.circle(fondo, color_pelota, (int(self.bx) + 10 + ox, int(self.by) + 10 + oy), 17, 2)
+        pygame.draw.ellipse(fondo, color_pelota,
                             (int(self.bx) + ox, int(self.by) + oy, 20, 20))
         self.pantalla.blit(fondo, (0, 0))
 
@@ -629,6 +760,8 @@ class Juego:
         # --- HUD (estable, sin shake) ---
         self._texto(f"{self.puntos1} - {self.puntos2}", self.f_marcador, "white",
                     (config.ANCHO // 2, 55))
+        self._drw_hud_poder(0, 30)    # J1: tecla Q.
+        self._drw_hud_poder(1, config.ANCHO - 30)  # J2: tecla ENTER.
         if self.punto_oro:
             self._texto("PUNTO DE ORO!", self.f_sub, COLOR_ROJO, (config.ANCHO // 2, 105))
         elif self.jugando:
@@ -650,6 +783,42 @@ class Juego:
             pygame.draw.rect(self.pantalla, COLOR_VERDE, self.rect_continuar, border_radius=8)
             img = self.f_normal.render("CONTINUAR", True, "white")
             self.pantalla.blit(img, img.get_rect(center=self.rect_continuar.center))
+
+    def _drw_hud_poder(self, i, x_anc):
+        # Muestra el poder en mano (con su tecla) o el activo con barra de tiempo.
+        tecla = "Q" if i == 0 else "ENTER"
+        if self.poder_activo[i] is not None:
+            nombre, color = PODERES[self.poder_activo[i]]
+            restante = max(0.0, self.poder_ms[i] / 1000)
+            img = self.f_peque.render(f"{nombre} {restante:.1f}s", True, color)
+            rect = img.get_rect()
+            if i == 0:
+                rect.midleft = (x_anc, 95)
+            else:
+                rect.midright = (x_anc, 95)
+            self.pantalla.blit(img, rect)
+            # Barra proporcional del tiempo restante.
+            total = self._duracion_poder(self.poder_activo[i])
+            ancho = 110
+            barra = pygame.Rect(0, 0, ancho, 5)
+            if i == 0:
+                barra.midleft = (x_anc, rect.bottom + 5)
+            else:
+                barra.midright = (x_anc, rect.bottom + 5)
+            pygame.draw.rect(self.pantalla, "#333333", barra, border_radius=3)
+            lleno = pygame.Rect(barra.x, barra.y, int(ancho * self.poder_ms[i] / total), 5)
+            pygame.draw.rect(self.pantalla, color, lleno, border_radius=3)
+        elif self.poder_mano[i] is not None:
+            nombre, color = PODERES[self.poder_mano[i]]
+            parpadeo = (int(time.time() * 3) % 2 == 0)
+            if parpadeo:
+                img = self.f_peque.render(f"[{tecla}] {nombre}", True, color)
+                rect = img.get_rect()
+                if i == 0:
+                    rect.midleft = (x_anc, 95)
+                else:
+                    rect.midright = (x_anc, 95)
+                self.pantalla.blit(img, rect)
 
     # --- RESULTADOS ---
 

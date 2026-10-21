@@ -35,3 +35,14 @@ VELOCIDAD_ORO = 11        # Velocidad rapida para el desempate.
 VELOCIDAD_MAX = 16        # Tope de la pelota acelerada.
 ACELERACION = 1.03        # Factor de aceleracion por golpe de pala.
 MAX_ANGULO = 1.047        # Angulo maximo de rebote en radianes (60 grados).
+
+# --- PODERES (habilidades recogidas con la pala) ---
+DUR_CONGELAR = 2.0       # Segundos que la pelota queda quieta.
+DUR_LENTITUD = 5.0       # Segundos de pala rival lenta.
+DUR_RAPIDEZ = 5.0        # Segundos de pala propia rapida.
+DUR_REDUCCION = 5.0      # Segundos de pala rival reducida.
+FACTOR_LENTITUD = 0.5    # Multiplicador de velocidad con Lentitud.
+FACTOR_RAPIDEZ = 1.5     # Multiplicador de velocidad con Rapidez.
+FACTOR_REDUCCION = 0.5   # Multiplicador de alto de pala con Reduccion.
+SPAWN_PODER_MIN = 5.0    # Segundos minimos entre apariciones por arco.
+SPAWN_PODER_MAX = 9.0    # Segundos maximos entre apariciones por arco.
