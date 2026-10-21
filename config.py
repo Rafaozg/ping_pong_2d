@@ -73,8 +73,8 @@ DUR_FANTASMA = 1.5
 FACTOR_MURO = 2.0  # Multiplicador de alto de pala (doble)
 
 # --- MANDOS (gamepads PS3 y compatibles; USB y Bluetooth) ---
-MANDO_DEADZONE = 0.25   # Zona muerta del stick para mover la pala.
-MANDO_EJE_NAV = 0.55    # Inclinacion minima del stick para navegar menus.
+MANDO_DEADZONE = 0.35   # Zona muerta del stick para mover la pala (drift PS3).
+MANDO_EJE_NAV = 0.6     # Inclinacion minima del stick para navegar menus.
 MANDO_NAV_INICIAL = 350  # ms de espera antes de repetir el movimiento de seleccion.
 MANDO_NAV_REPETIR = 140  # ms entre repeticiones manteniendo stick/D-pad.
 MANDO_EJE_Y = 1         # Eje vertical del stick izquierdo (fallback sin mapa).
