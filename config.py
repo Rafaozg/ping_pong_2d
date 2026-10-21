@@ -71,3 +71,12 @@ DUR_MURO = 5.0
 DUR_INVERTIR = 5.0
 DUR_FANTASMA = 1.5
 FACTOR_MURO = 2.0  # Multiplicador de alto de pala (doble)
+
+# --- MANDOS (gamepads PS3 y compatibles; USB y Bluetooth) ---
+MANDO_DEADZONE = 0.25   # Zona muerta del stick para mover la pala.
+MANDO_EJE_NAV = 0.55    # Inclinacion minima del stick para navegar menus.
+MANDO_NAV_INICIAL = 350  # ms de espera antes de repetir el movimiento de seleccion.
+MANDO_NAV_REPETIR = 140  # ms entre repeticiones manteniendo stick/D-pad.
+MANDO_EJE_Y = 1         # Eje vertical del stick izquierdo (fallback sin mapa).
+MANDO_BTN_ACEPTAR = 0   # Boton crudo = Cruce (si no hay mapa de gamecontroller).
+MANDO_BTN_VOLVER = 1    # Boton crudo = Circulo.

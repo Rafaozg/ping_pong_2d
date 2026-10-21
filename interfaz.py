@@ -10,6 +10,7 @@ import pygame
 
 import config
 import datos
+from mandos import Mandos
 
 # --- COLORES DE UI (tema oscuro estilo cyborg) ---
 COLOR_PANEL = "#1a1a1a"
@@ -142,6 +143,13 @@ class Juego:
         self.error = ("", 0)
         self.dificultad = "NORMAL"
         self._iconos = self._generar_iconos()
+
+        # Mandos (PS3/compatibles): slot 0 = Jugador 1, slot 1 = Jugador 2.
+        self.mandos = Mandos()
+        self.sel = 0          # Elemento con foco del mando en la escena actual.
+        self.foco = "raton"   # "mando" resalta el elemento seleccionado.
+        self._escena_ut = None
+
         self._crear_menu()
 
     # --- SONIDO ---
@@ -177,6 +185,9 @@ class Juego:
         pygame.quit()
 
     def _evento(self, e):
+        if e.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN):
+            self.foco = "raton"
+        self.mandos.procesar(e)
         if self.escena == "menu":
             self._ev_menu(e)
         elif self.escena == "amistoso":
@@ -191,6 +202,13 @@ class Juego:
             self._ev_resultados(e)
 
     def _actualizar(self, dt):
+        self._ajusta_sel()
+        self.mandos.actualizar(dt)
+        for jug, acc in self.mandos.drenar():
+            self._mando_accion(jug, acc)
+            self._ajusta_sel()
+        for msg in self.mandos.drenar_mensajes():
+            self._fallo(msg)
         if self.error[1] > 0:
             self.error = (self.error[0], self.error[1] - 1)
         if self.escena == "juego":
@@ -211,6 +229,11 @@ class Juego:
             self._drw_juego(raton)
         elif self.escena == "resultados":
             self._drw_resultados(raton)
+        self._ajusta_sel()
+        if self.foco == "mando":
+            elems = self._elementos_foco()
+            if elems and 0 <= self.sel < len(elems):
+                pygame.draw.rect(self.pantalla, "white", elems[self.sel], 3, border_radius=8)
         if self.error[1] > 0:
             img = self.f_normal.render(self.error[0], True, COLOR_ROJO)
             self.pantalla.blit(img, img.get_rect(center=(config.ANCHO // 2, config.ALTO - 60)))
@@ -255,6 +278,114 @@ class Juego:
     def _fallo(self, mensaje):
         self.error = (mensaje, 180)
 
+    # --- MANDOS (navegacion de menus y acciones) ---
+
+    def _ajusta_sel(self):
+        # Reinicia la seleccion cuando cambia la escena.
+        if self._escena_ut != self.escena:
+            self._escena_ut = self.escena
+            self.sel = 0
+
+    def _elementos_foco(self):
+        # Rects navegables con mando en la escena actual (vacio en juego).
+        s = self.escena
+        try:
+            if s == "menu":
+                elems = [self.btn_amistoso, self.btn_torneo,
+                         self.btn_resultados, self.btn_salir]
+            elif s == "amistoso":
+                elems = [b for b, _ in getattr(self, "dif_btns", [])]
+                elems += [self.btn_comenzar, self.btn_atras]
+            elif s == "torneo":
+                elems = [b for b, _ in getattr(self, "dif_btns_t", [])]
+                elems += [self.btn_iniciar, self.btn_atras]
+            elif s == "versus":
+                elems = [self.btn_mesa]
+            elif s == "resultados":
+                elems = [self.btn_tab_am, self.btn_tab_to,
+                         self.btn_borrar, self.btn_atras]
+            elif s == "juego" and self.fin_partida and getattr(self, "rect_continuar", None):
+                elems = [self.rect_continuar]
+            else:
+                elems = []
+        except AttributeError:
+            return []
+        return [getattr(el, "rect", el) for el in elems]
+
+    def _mando_accion(self, jug, acc):
+        self.foco = "mando"
+        if acc == "aceptar":
+            self._foco_activar(jug)
+        elif acc == "volver":
+            self._foco_volver()
+        elif acc in ("nav_up", "nav_down") and self.escena != "juego":
+            n = len(self._elementos_foco())
+            if n:
+                self.sel = (self.sel + (-1 if acc == "nav_up" else 1)) % n
+
+    def _foco_activar(self, jug):
+        # Cruce del mando (o Enter) sobre el elemento con foco.
+        if self.escena == "juego":
+            if self.fin_partida:
+                self._siguiente()
+            else:
+                self._activar_poder(jug)
+            return
+        elems = self._elementos_foco()
+        if not elems:
+            return
+        self.sel = max(0, min(self.sel, len(elems) - 1))
+        s = self.escena
+        if s == "menu":
+            if self.sel == 0:
+                self._crear_amistoso()
+            elif self.sel == 1:
+                self._crear_torneo()
+            elif self.sel == 2:
+                self._crear_resultados()
+            else:
+                self.corriendo = False
+        elif s == "amistoso":
+            n = len(getattr(self, "dif_btns", []))
+            if self.sel < n:
+                self.dificultad = self.dif_btns[self.sel][1]
+            elif self.sel == n:
+                self._configurar_amistoso()
+            else:
+                self.escena = "menu"
+        elif s == "torneo":
+            n = len(getattr(self, "dif_btns_t", []))
+            if self.sel < n:
+                self.dificultad = self.dif_btns_t[self.sel][1]
+            elif self.sel == n:
+                self._configurar_torneo()
+            else:
+                self.escena = "menu"
+        elif s == "versus":
+            self._preparar_partido()
+        elif s == "resultados":
+            if self.sel == 0:
+                self.tab_res = "Amistoso"
+                self.lista_res = datos.leer_historial(self.tab_res)
+            elif self.sel == 1:
+                self.tab_res = "Torneo"
+                self.lista_res = datos.leer_historial(self.tab_res)
+            elif self.sel == 2:
+                datos.borrar_todo()
+                self.lista_res = []
+            else:
+                self.escena = "menu"
+        elif s == "juego":
+            if self.fin_partida:
+                self._siguiente()
+            else:
+                self._activar_poder(jug)
+
+    def _foco_volver(self):
+        # Circulo del mando = ATRAS en las pantallas de configuracion.
+        if self.escena in ("amistoso", "torneo", "resultados"):
+            self.escena = "menu"
+
     # --- MENU ---
 
     def _crear_menu(self):
@@ -282,6 +413,10 @@ class Juego:
         self._texto("PING PONG 2D", self.f_titulo, "white", (config.ANCHO // 2, config.ALTO // 4))
         for b in (self.btn_amistoso, self.btn_torneo, self.btn_resultados, self.btn_salir):
             b.dibujar(self.pantalla, raton)
+        n = self.mandos.conectados()
+        if n:
+            self._texto(f"MANDOS: {n}   CRUZ: ACEPTAR   CIRCULO: ATRAS",
+                        self.f_peque, COLOR_GRIS, (config.ANCHO // 2, config.ALTO - 24))
 
     # --- PARTIDO AMISTOSO ---
 
@@ -559,16 +694,17 @@ class Juego:
             vel1 *= f_l
         if self.poder_activo[0] == "lentitud":
             vel2 *= f_l
-        s1 = int(self.teclas.get("s", False))
-        w1 = int(self.teclas.get("w", False))
-        up2 = int(self.teclas.get("up", False))
-        dn2 = int(self.teclas.get("down", False))
+        # Teclado + mando analogico (stick/D-pad) en el mismo eje (-1 arriba, +1 abajo).
+        mov1 = int(self.teclas.get("s", False)) - int(self.teclas.get("w", False))
+        mov2 = int(self.teclas.get("down", False)) - int(self.teclas.get("up", False))
+        mov1 = max(-1.0, min(1.0, mov1 + self.mandos.direccion(0)))
+        mov2 = max(-1.0, min(1.0, mov2 + self.mandos.direccion(1)))
         if getattr(self, "invertir_ms", 0) > 0 and self.invertir_por_j == 0:
-            s1, w1 = -s1, -w1
+            mov1 = -mov1
         if getattr(self, "invertir_ms", 0) > 0 and self.invertir_por_j == 1:
-            up2, dn2 = -up2, -dn2
-        vy1 = int((s1 - w1) * vel1)
-        vy2 = int((dn2 - up2) * vel2)
+            mov2 = -mov2
+        vy1 = int(mov1 * vel1)
+        vy2 = int(mov2 * vel2)
         self.vy_pala1, self.vy_pala2 = vy1, vy2
         # Reduccion: achica la pala del rival de quien la activo (conserva el centro).
         alto_base = getattr(self, "_alto_p", config.ALTO_PALA)
@@ -966,7 +1102,10 @@ class Juego:
 
     def _drw_hud_poder(self, i, x_anc):
         # Muestra el poder en mano (con su tecla) o el activo con barra de tiempo.
-        tecla = "Q" if i == 0 else "ENTER"
+        if self.mandos.tiene(i):
+            tecla = "X"  # Cruce del mando asignado a ese jugador.
+        else:
+            tecla = "Q" if i == 0 else "ENTER"
         if self.poder_activo[i] is not None:
             nombre, color = PODERES[self.poder_activo[i]]
             restante = max(0.0, self.poder_ms[i] / 1000)
