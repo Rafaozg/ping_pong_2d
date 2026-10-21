@@ -26,6 +26,8 @@ PODERES = {
     "lentitud": ("LENT", "#a855f7"),
     "rapidez": ("RAP", "#22c55e"),
     "reduccion": ("REC", "#f97316"),
+    "muro": ("MURO", "#ffd93b"),
+    "invertir": ("INV", "#ff4d6d"),
 }
 
 
@@ -138,6 +140,8 @@ class Juego:
 
         self.escena = "menu"
         self.error = ("", 0)
+        self.dificultad = "NORMAL"
+        self._iconos = self._generar_iconos()
         self._crear_menu()
 
     # --- SONIDO ---
@@ -212,6 +216,32 @@ class Juego:
             self.pantalla.blit(img, img.get_rect(center=(config.ANCHO // 2, config.ALTO - 60)))
         pygame.display.flip()
 
+    def _generar_iconos(self):
+        iconos = {}
+        try:
+            import os
+            base = os.path.join(config.DIRECTORIO_BASE, "ico")
+            mapa = {
+                "congelar": os.path.join(base, "congelar.png"),
+                "lentitud": os.path.join(base, "lentitud.png"),
+                "rapidez": os.path.join(base, "rapidez.png"),
+                "reduccion": os.path.join(base, "reduccion.png"),
+                "muro": os.path.join(base, "muro.png"),
+                "invertir": os.path.join(base, "invertir.png"),
+            }
+            for tipo, ruta in mapa.items():
+                if not os.path.exists(ruta):
+                    continue
+                try:
+                    img = pygame.image.load(ruta).convert_alpha()
+                    img = pygame.transform.smoothscale(img, (66, 66))
+                    iconos[tipo] = img
+                except Exception:
+                    continue
+        except Exception:
+            return {}
+        return iconos
+
     def _texto(self, s, fuente, color, pos, centro=True):
         img = fuente.render(s, True, color)
         rect = img.get_rect()
@@ -258,10 +288,17 @@ class Juego:
     def _crear_amistoso(self):
         self.escena = "amistoso"
         cx, cy = config.ANCHO // 2, config.ALTO // 2
-        self.inp1 = EntradaTexto(cx, cy - 40, 320, 44, "JUGADOR 1", self.f_normal)
-        self.inp2 = EntradaTexto(cx, cy + 20, 320, 44, "JUGADOR 2", self.f_normal)
-        self.btn_comenzar = Boton(cx, cy + 100, 260, 48, "COMENZAR", COLOR_VERDE, self.f_normal)
-        self.btn_atras = Boton(cx, cy + 160, 260, 44, "ATRAS", COLOR_GRIS, self.f_normal)
+        self.inp1 = EntradaTexto(cx, cy - 60, 320, 44, "JUGADOR 1", self.f_normal)
+        self.inp2 = EntradaTexto(cx, cy, 320, 44, "JUGADOR 2", self.f_normal)
+        self.dif_btns = []
+        w_b = 90
+        h_b = 40
+        for i, d in enumerate(config.DIFICULTADES):
+            x = cx - (w_b * 1.5) + i * (w_b + 10)
+            b = Boton(x, cy + 60, w_b, h_b, d, COLOR_PANEL, self.f_peque)
+            self.dif_btns.append((b, d))
+        self.btn_comenzar = Boton(cx, cy + 120, 260, 48, "COMENZAR", COLOR_VERDE, self.f_normal)
+        self.btn_atras = Boton(cx, cy + 180, 260, 44, "ATRAS", COLOR_GRIS, self.f_normal)
 
     def _ev_amistoso(self, e):
         self.inp1.manejar(e)
@@ -269,6 +306,10 @@ class Juego:
         if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
             self._configurar_amistoso()
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            for b, d in getattr(self, "dif_btns", []):
+                if b.clic(e.pos):
+                    self.dificultad = d
+                    return
             if self.btn_comenzar.clic(e.pos):
                 self._configurar_amistoso()
             elif self.btn_atras.clic(e.pos):
@@ -291,10 +332,15 @@ class Juego:
     def _drw_amistoso(self, raton):
         cx = config.ANCHO // 2
         cy = config.ALTO // 2
-        self._texto("PARTIDO AMISTOSO", self.f_titulo, "white", (cx, cy - 160))
-        self._texto("NOMBRES DE JUGADORES", self.f_sub, COLOR_AMARILLO, (cx, cy - 90))
+        self._texto("PARTIDO AMISTOSO", self.f_titulo, "white", (cx, cy - 180))
+        self._texto("NOMBRES DE JUGADORES", self.f_sub, COLOR_AMARILLO, (cx, cy - 110))
+        self._texto("DIFICULTAD", self.f_peque, COLOR_AMARILLO, (cx, cy + 30))
         self.inp1.dibujar(self.pantalla)
         self.inp2.dibujar(self.pantalla)
+        for b, d in getattr(self, "dif_btns", []):
+            b.dibujar(self.pantalla, raton)
+            if d == self.dificultad:
+                pygame.draw.rect(self.pantalla, "white", b.rect, 2, border_radius=8)
         self.btn_comenzar.dibujar(self.pantalla, raton)
         self.btn_atras.dibujar(self.pantalla, raton)
 
@@ -305,9 +351,16 @@ class Juego:
         cx, cy = config.ANCHO // 2, config.ALTO // 2
         self.cajas = []
         for i in range(4):
-            self.cajas.append(EntradaTexto(cx, cy - 80 + i * 52, 320, 40, f"Equipo {i + 1}", self.f_normal))
-        self.btn_iniciar = Boton(cx, cy + 160, 260, 48, "INICIAR COPA", COLOR_AMARILLO, self.f_normal)
-        self.btn_atras = Boton(cx, cy + 220, 260, 44, "ATRAS", COLOR_GRIS, self.f_normal)
+            self.cajas.append(EntradaTexto(cx, cy - 100 + i * 52, 320, 40, f"Equipo {i + 1}", self.f_normal))
+        self.dif_btns_t = []
+        w_b = 90
+        h_b = 40
+        for i, d in enumerate(config.DIFICULTADES):
+            x = cx - (w_b * 1.5) + i * (w_b + 10)
+            b = Boton(x, cy + 120, w_b, h_b, d, COLOR_PANEL, self.f_peque)
+            self.dif_btns_t.append((b, d))
+        self.btn_iniciar = Boton(cx, cy + 180, 260, 48, "INICIAR COPA", COLOR_AMARILLO, self.f_normal)
+        self.btn_atras = Boton(cx, cy + 240, 260, 44, "ATRAS", COLOR_GRIS, self.f_normal)
 
     def _ev_torneo(self, e):
         for c in self.cajas:
@@ -315,6 +368,10 @@ class Juego:
         if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
             self._configurar_torneo()
         elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            for b, d in getattr(self, "dif_btns_t", []):
+                if b.clic(e.pos):
+                    self.dificultad = d
+                    return
             if self.btn_iniciar.clic(e.pos):
                 self._configurar_torneo()
             elif self.btn_atras.clic(e.pos):
@@ -339,10 +396,15 @@ class Juego:
     def _drw_torneo(self, raton):
         cx = config.ANCHO // 2
         cy = config.ALTO // 2
-        self._texto("TORNEO", self.f_titulo, "white", (cx, cy - 180))
-        self._texto("COPA (4 EQUIPOS)", self.f_sub, COLOR_AMARILLO, (cx, cy - 120))
+        self._texto("TORNEO", self.f_titulo, "white", (cx, cy - 200))
+        self._texto("COPA (4 EQUIPOS)", self.f_sub, COLOR_AMARILLO, (cx, cy - 140))
+        self._texto("DIFICULTAD", self.f_peque, COLOR_AMARILLO, (cx, cy + 90))
         for c in self.cajas:
             c.dibujar(self.pantalla)
+        for b, d in getattr(self, "dif_btns_t", []):
+            b.dibujar(self.pantalla, raton)
+            if d == self.dificultad:
+                pygame.draw.rect(self.pantalla, "white", b.rect, 2, border_radius=8)
         self.btn_iniciar.dibujar(self.pantalla, raton)
         self.btn_atras.dibujar(self.pantalla, raton)
 
@@ -384,15 +446,29 @@ class Juego:
         self.punto_oro = False
         self.fin_partida = False
         self.ganador = ""
-        self.tiempo_limite = 60
         self.jugando = False
 
-        mitad = config.ALTO // 2
-        self.j1 = pygame.Rect(30, mitad - config.ALTO_PALA // 2, config.ANCHO_PALA, config.ALTO_PALA)
-        self.j2 = pygame.Rect(config.ANCHO - 50, mitad - config.ALTO_PALA // 2, config.ANCHO_PALA, config.ALTO_PALA)
+        dif = getattr(self, "dificultad", "NORMAL")
+        self._dif = dif
+        self.tiempo_limite = 120
+        self._v_pe = config.VELOCIDAD_PELOTA * config.DIF_VEL_PELOTA.get(dif, 1.0)
+        self._v_or = config.VELOCIDAD_ORO * config.DIF_VEL_ORO.get(dif, 1.0)
+        self._v_jg = config.VELOCIDAD_JUGADOR * config.DIF_VEL_JUGADOR.get(dif, 1.0)
+        self._v_mx = config.VELOCIDAD_MAX * config.DIF_VEL_MAX.get(dif, 1.0)
+        self._acl = config.ACELERACION * config.DIF_ACELERACION.get(dif, 1.0)
+        self._spm = config.DIF_SPAWN_PODER.get(dif, 1.0)
+        self._d_p = config.DIF_DUR_PODER.get(dif, 1.0)
+        self._f_l = config.DIF_FACT_LENT.get(dif, config.FACTOR_LENTITUD)
+        self._f_r = config.DIF_FACT_RAP.get(dif, config.FACTOR_RAPIDEZ)
+        self._f_red = config.DIF_FACT_RED.get(dif, config.FACTOR_REDUCCION)
+        self._alto_p = config.ALTO_PALA * config.DIF_ALTO_PALA.get(dif, 1.0)
 
-        self.dx = config.VELOCIDAD_PELOTA
-        self.dy = config.VELOCIDAD_PELOTA
+        mitad = config.ALTO // 2
+        self.j1 = pygame.Rect(30, mitad - self._alto_p // 2, config.ANCHO_PALA, self._alto_p)
+        self.j2 = pygame.Rect(config.ANCHO - 50, mitad - self._alto_p // 2, config.ANCHO_PALA, self._alto_p)
+
+        self.dx = self._v_pe
+        self.dy = self._v_pe
         self.estela = deque(maxlen=10)
         self.shake_amp, self.shake_ticks = 0.0, 0
 
@@ -401,8 +477,13 @@ class Juego:
         self.poder_mano = [None, None]
         self.poder_activo = [None, None]
         self.poder_ms = [0.0, 0.0]
-        self.poder_spawn_ms = [random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000,
-                               random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000]
+        s1 = random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000 * self._spm
+        s2 = random.uniform(config.SPAWN_PODER_MIN, config.SPAWN_PODER_MAX) * 1000 * self._spm
+        self.poder_spawn_ms = [s1, s2]
+
+        # Efectos
+        self.invertir_por_j = None
+        self.invertir_ms = 0.0
 
         self._centrar_pelota()
         self._iniciar_cuenta()
@@ -410,7 +491,7 @@ class Juego:
     def _centrar_pelota(self):
         self.bx = config.ANCHO / 2 - 10
         self.by = config.ALTO / 2 - 10
-        vel = config.VELOCIDAD_ORO if self.punto_oro else config.VELOCIDAD_PELOTA
+        vel = self._v_or if getattr(self, "punto_oro", False) else getattr(self, "_v_pe", config.VELOCIDAD_PELOTA)
         self.dx = vel * random.choice([1, -1])
         self.dy = vel * random.choice([1, -1])
         self.estela.clear()
@@ -465,22 +546,44 @@ class Juego:
     def _upd_juego(self, dt):
         # Palas con movimiento continuo (se mueven tambien durante la cuenta).
         # Velocidades con habilidades: rapidez propia y lentitud del rival.
-        vel1 = config.VELOCIDAD_JUGADOR
-        vel2 = config.VELOCIDAD_JUGADOR
+        vel1 = getattr(self, "_v_jg", config.VELOCIDAD_JUGADOR)
+        vel2 = getattr(self, "_v_jg", config.VELOCIDAD_JUGADOR)
+        f_r = getattr(self, "_f_r", config.FACTOR_RAPIDEZ)
+        f_l = getattr(self, "_f_l", config.FACTOR_LENTITUD)
+        f_red = getattr(self, "_f_red", config.FACTOR_REDUCCION)
         if self.poder_activo[0] == "rapidez":
-            vel1 *= config.FACTOR_RAPIDEZ
+            vel1 *= f_r
         if self.poder_activo[1] == "rapidez":
-            vel2 *= config.FACTOR_RAPIDEZ
+            vel2 *= f_r
         if self.poder_activo[1] == "lentitud":
-            vel1 *= config.FACTOR_LENTITUD
+            vel1 *= f_l
         if self.poder_activo[0] == "lentitud":
-            vel2 *= config.FACTOR_LENTITUD
-        vy1 = int((int(self.teclas.get("s", False)) - int(self.teclas.get("w", False))) * vel1)
-        vy2 = int((int(self.teclas.get("down", False)) - int(self.teclas.get("up", False))) * vel2)
+            vel2 *= f_l
+        s1 = int(self.teclas.get("s", False))
+        w1 = int(self.teclas.get("w", False))
+        up2 = int(self.teclas.get("up", False))
+        dn2 = int(self.teclas.get("down", False))
+        if getattr(self, "invertir_ms", 0) > 0 and self.invertir_por_j == 0:
+            s1, w1 = -s1, -w1
+        if getattr(self, "invertir_ms", 0) > 0 and self.invertir_por_j == 1:
+            up2, dn2 = -up2, -dn2
+        vy1 = int((s1 - w1) * vel1)
+        vy2 = int((dn2 - up2) * vel2)
         self.vy_pala1, self.vy_pala2 = vy1, vy2
         # Reduccion: achica la pala del rival de quien la activo (conserva el centro).
-        alto1 = int(config.ALTO_PALA * (config.FACTOR_REDUCCION if self.poder_activo[1] == "reduccion" else 1))
-        alto2 = int(config.ALTO_PALA * (config.FACTOR_REDUCCION if self.poder_activo[0] == "reduccion" else 1))
+        alto_base = getattr(self, "_alto_p", config.ALTO_PALA)
+        if self.poder_activo[0] == "muro":
+            alto1 = int(alto_base * config.FACTOR_MURO)
+        elif self.poder_activo[1] == "reduccion":
+            alto1 = int(alto_base * f_red)
+        else:
+            alto1 = int(alto_base)
+        if self.poder_activo[1] == "muro":
+            alto2 = int(alto_base * config.FACTOR_MURO)
+        elif self.poder_activo[0] == "reduccion":
+            alto2 = int(alto_base * f_red)
+        else:
+            alto2 = int(alto_base)
         for pala, alto in ((self.j1, alto1), (self.j2, alto2)):
             if pala.h != alto:
                 centro = pala.centery
@@ -538,19 +641,43 @@ class Juego:
     # --- PODERES ---
 
     def _duracion_poder(self, tipo):
+        d = getattr(self, "_d_p", 1.0)
         return {
-            "congelar": config.DUR_CONGELAR * 1000,
-            "lentitud": config.DUR_LENTITUD * 1000,
-            "rapidez": config.DUR_RAPIDEZ * 1000,
-            "reduccion": config.DUR_REDUCCION * 1000,
+            "congelar": config.DUR_CONGELAR * 1000 * d,
+            "lentitud": config.DUR_LENTITUD * 1000 * d,
+            "rapidez": config.DUR_RAPIDEZ * 1000 * d,
+            "reduccion": config.DUR_REDUCCION * 1000 * d,
+            "muro": config.DUR_MURO * 1000 * d,
+            "invertir": config.DUR_INVERTIR * 1000 * d,
         }[tipo]
 
     def _upd_poderes(self, dt):
+        # Efectos con temporizador
+        if self.invertir_ms > 0:
+            self.invertir_ms -= dt
+            if self.invertir_ms <= 0:
+                self.invertir_ms = 0.0
+                self.invertir_por_j = None
+
         for i in (0, 1):
             # Enfriamiento del efecto activo (al agotarse queda libre la mano).
             if self.poder_activo[i] is not None:
                 self.poder_ms[i] -= dt
                 if self.poder_ms[i] <= 0:
+                    # Limpiar efectos especiales al expirar
+                    if self.poder_activo[i] == "muro":
+                        alto_base = getattr(self, "_alto_p", config.ALTO_PALA)
+                        pala = self.j1 if i == 0 else self.j2
+                        centro = pala.centery
+                        pala.h = int(alto_base)
+                        pala.centery = centro
+                        if pala.top < config.GROSOR_PARED:
+                            pala.top = config.GROSOR_PARED
+                        if pala.bottom > config.ALTO - config.GROSOR_PARED:
+                            pala.bottom = config.ALTO - config.GROSOR_PARED
+                    if self.poder_activo[i] == "invertir":
+                        self.invertir_por_j = None
+                        self.invertir_ms = 0.0
                     self.poder_activo[i] = None
                     self.poder_ms[i] = 0.0
                 continue
@@ -559,8 +686,9 @@ class Juego:
             if self.campo_poder[i] is not None:
                 pala = self.j1 if i == 0 else self.j2
                 if pala.colliderect(self.campo_poder[i]["rect"]):
-                    self.poder_mano[i] = self.campo_poder[i]["tipo"]
+                    tipo = self.campo_poder[i]["tipo"]
                     self.campo_poder[i] = None
+                    self.poder_mano[i] = tipo
                     self._sonar("poder")
                     self._sacudir(3)
                 continue
@@ -573,8 +701,9 @@ class Juego:
             self.poder_spawn_ms[i] -= dt
             if self.poder_spawn_ms[i] <= 0:
                 self._spawn_poder(i)
+                spm = getattr(self, "_spm", 1.0)
                 self.poder_spawn_ms[i] = random.uniform(config.SPAWN_PODER_MIN,
-                                                        config.SPAWN_PODER_MAX) * 1000
+                                                        config.SPAWN_PODER_MAX) * 1000 * spm
 
     def _spawn_poder(self, i):
         # En la columna de la pala, altura aleatoria dentro del arco.
@@ -590,9 +719,36 @@ class Juego:
     def _activar_poder(self, i):
         if self.fin_partida or self.poder_mano[i] is None or self.poder_activo[i] is not None:
             return
-        self.poder_activo[i] = self.poder_mano[i]
+        tipo = self.poder_mano[i]
+        if tipo == "muro":
+            pala = self.j1 if i == 0 else self.j2
+            centro = pala.centery
+            base = getattr(self, "_alto_p", config.ALTO_PALA)
+            pala.h = int(base * config.FACTOR_MURO)
+            pala.centery = centro
+            if pala.top < config.GROSOR_PARED:
+                pala.top = config.GROSOR_PARED
+            if pala.bottom > config.ALTO - config.GROSOR_PARED:
+                pala.bottom = config.ALTO - config.GROSOR_PARED
+            self.poder_activo[i] = tipo
+            self.poder_mano[i] = None
+            self.poder_ms[i] = self._duracion_poder(tipo)
+            self._sonar("activar")
+            self._sacudir(4)
+            return
+        if tipo == "invertir":
+            self.invertir_por_j = 1 - i  # Invierte controles del rival
+            self.invertir_ms = self._duracion_poder(tipo)
+            self.poder_activo[i] = tipo
+            self.poder_mano[i] = None
+            self.poder_ms[i] = self._duracion_poder(tipo)
+            self._sonar("activar")
+            self._sacudir(4)
+            return
+
+        self.poder_activo[i] = tipo
         self.poder_mano[i] = None
-        self.poder_ms[i] = self._duracion_poder(self.poder_activo[i])
+        self.poder_ms[i] = self._duracion_poder(tipo)
         self._sonar("activar")
         self._sacudir(4)
 
@@ -636,8 +792,10 @@ class Juego:
         offset = max(-1.0, min(1.0, offset))
         angulo = offset * config.MAX_ANGULO
 
-        vel = math.hypot(self.dx, self.dy) * config.ACELERACION
-        vel = min(vel, config.VELOCIDAD_MAX)
+        acl = getattr(self, "_acl", config.ACELERACION)
+        v_mx = getattr(self, "_v_mx", config.VELOCIDAD_MAX)
+        vel = math.hypot(self.dx, self.dy) * acl
+        vel = min(vel, v_mx)
         dx = vel * math.cos(angulo) * direccion
         dy = vel * math.sin(angulo) + vy_pala * 0.4  # Spin segun movimiento de la pala.
 
@@ -726,10 +884,26 @@ class Juego:
             nombre, color = PODERES[self.campo_poder[i]["tipo"]]
             pulso = 0.5 + 0.5 * math.sin(time.time() * 5)
             radio = r.w // 2
-            pygame.draw.circle(fondo, color, (r.centerx + ox, r.centery + oy), radio + int(3 * pulso), 3)
-            pygame.draw.circle(fondo, "#0a0a0a", (r.centerx + ox, r.centery + oy), radio - 4)
-            img = self.f_peque.render(nombre, True, color)
-            fondo.blit(img, img.get_rect(center=(r.centerx + ox, r.centery + oy)))
+            pygame.draw.circle(fondo, color, (r.centerx + ox, r.centery + oy), radio + int(8 * pulso), 8)
+            pygame.draw.circle(fondo, "#0c0c0c", (r.centerx + ox, r.centery + oy), radio - 12)
+            try:
+                icono = getattr(self, "_iconos", {}).get(self.campo_poder[i]["tipo"])
+                if icono:
+                    ir = icono.get_rect()
+                    ir.center = (r.centerx + ox, r.centery + oy)
+                    try:
+                        fondo.blit(icono, ir)
+                    except Exception:
+                        fondo.blit(icono, ir)
+                else:
+                    img = self.f_peque.render(nombre, True, color)
+                    fondo.blit(img, img.get_rect(center=(r.centerx + ox, r.centery + oy)))
+            except Exception:
+                try:
+                    img = self.f_peque.render(nombre, True, color)
+                    fondo.blit(img, img.get_rect(center=(r.centerx + ox, r.centery + oy)))
+                except Exception:
+                    pass
 
         # Estela con alfa real (surface SRCALPHA).
         capa = pygame.Surface((config.ANCHO, config.ALTO), pygame.SRCALPHA)
@@ -742,10 +916,12 @@ class Juego:
 
         # Pelota congelada (poder CONG): tinte y halo de hielo.
         congelada = "congelar" in (self.poder_activo[0], self.poder_activo[1])
-        color_pelota = PODERES["congelar"][1] if congelada else (
-            config.COLOR_PUNTO_ORO if self.punto_oro else config.COLOR_BLANCO)
         if congelada:
-            pygame.draw.circle(fondo, color_pelota, (int(self.bx) + 10 + ox, int(self.by) + 10 + oy), 17, 2)
+            color_pelota = PODERES["congelar"][1]
+        else:
+            color_pelota = config.COLOR_PUNTO_ORO if self.punto_oro else config.COLOR_BLANCO
+        if congelada:
+            pygame.draw.circle(fondo, PODERES["congelar"][1], (int(self.bx) + 10 + ox, int(self.by) + 10 + oy), 17, 2)
         pygame.draw.ellipse(fondo, color_pelota,
                             (int(self.bx) + ox, int(self.by) + oy, 20, 20))
         self.pantalla.blit(fondo, (0, 0))
@@ -762,8 +938,12 @@ class Juego:
                     (config.ANCHO // 2, 55))
         self._drw_hud_poder(0, 30)    # J1: tecla Q.
         self._drw_hud_poder(1, config.ANCHO - 30)  # J2: tecla ENTER.
+        dif = getattr(self, "_dif", getattr(self, "dificultad", "NORMAL"))
+        self._texto(f"DIFICULTAD: {dif}", self.f_peque, COLOR_AMARILLO, (config.ANCHO // 2, 85))
+        dif = getattr(self, "_dif", getattr(self, "dificultad", "NORMAL"))
+        self._texto(f"DIFICULTAD: {dif}", self.f_peque, COLOR_AMARILLO, (config.ANCHO // 2, 85))
         if self.punto_oro:
-            self._texto("PUNTO DE ORO!", self.f_sub, COLOR_ROJO, (config.ANCHO // 2, 105))
+            self._texto("PUNTO DE ORO!", self.f_sub, COLOR_ROJO, (config.ANCHO // 2, 115))
         elif self.jugando:
             restante = max(0, self.tiempo_limite - (time.time() - self.tiempo_inicio))
             self._texto(f"{int(restante // 60)}:{int(restante % 60):02d}", self.f_sub, COLOR_AMARILLO,
@@ -797,6 +977,17 @@ class Juego:
             else:
                 rect.midright = (x_anc, 95)
             self.pantalla.blit(img, rect)
+            try:
+                icono = getattr(self, "_iconos", {}).get(self.poder_activo[i])
+                if icono:
+                    ir = icono.get_rect()
+                    if i == 0:
+                        ir.midleft = (rect.right + 30, rect.centery)
+                    else:
+                        ir.midright = (rect.left - 30, rect.centery)
+                    self.pantalla.blit(icono, ir)
+            except Exception:
+                pass
             # Barra proporcional del tiempo restante.
             total = self._duracion_poder(self.poder_activo[i])
             ancho = 110
@@ -819,6 +1010,17 @@ class Juego:
                 else:
                     rect.midright = (x_anc, 95)
                 self.pantalla.blit(img, rect)
+            try:
+                icono = getattr(self, "_iconos", {}).get(self.poder_mano[i])
+                if icono:
+                    ir = icono.get_rect()
+                    if i == 0:
+                        ir.midleft = (rect.right + 30, rect.centery)
+                    else:
+                        ir.midright = (rect.left - 30, rect.centery)
+                    self.pantalla.blit(icono, ir)
+            except Exception:
+                pass
 
     # --- RESULTADOS ---
 
