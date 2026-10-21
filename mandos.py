@@ -18,17 +18,18 @@ import config
 class Mando:
     """Estado normalizado de un mando conectado."""
 
-    def __init__(self, nombre, iid, joy=None, ctrl=None):
+    def __init__(self, nombre, iid, joy=None, ctrl=None, eje_y_offset=0.0):
         self.nombre = nombre
-        self.iid = iid            # instance_id SDL (unico aunque haya hotplug)
-        self.joy = joy            # pygame.joystick.Joystick o None (falso mando)
-        self.ctrl = ctrl          # pygame._sdl2.controller.Controller o None
-        self.jugador = None       # 0/1 si ocupa un slot
-        self.eje_y = 0.0          # Stick izquierdo vertical (-1 arriba, +1 abajo)
-        self.up = False           # D-pad arriba mantenido
-        self.dn = False           # D-pad abajo mantenido
-        self.acciones = []        # Bordos pendientes: "aceptar"/"volver"/"nav_*"
-        self.nav_prev = 0         # Repeticion de navegacion en menus
+        self.iid = iid
+        self.joy = joy
+        self.ctrl = ctrl
+        self.jugador = None
+        self.eje_y = 0.0
+        self.eje_y_offset = eje_y_offset  # Centro calibrado al conectar
+        self.up = False
+        self.dn = False
+        self.acciones = []
+        self.nav_prev = 0
         self.nav_ms = 0.0
         self.nav_espera = 0.0
 
@@ -85,19 +86,28 @@ class Mandos:
         if iid in self._por_iid:
             return
         ctrl = None
+        eje_y_inicial = 0.0
         if self.ctrl_ok and _ctrl is not None:
             try:
                 ctrl = _ctrl.Controller.from_joystick(joy)
             except Exception:
                 ctrl = None
-        self._alta(joy.get_name(), iid, joy, ctrl)
+        # Leer estado inicial del eje Y para calibrar el centro (evita drift al conectar).
+        try:
+            if ctrl is not None:
+                # GameController: el eje ya viene normalizado [-1,1]
+                eje_y_inicial = ctrl.get_axis(pygame.CONTROLLER_AXIS_LEFTY)
+            else:
+                eje_y_inicial = joy.get_axis(config.MANDO_EJE_Y)
+        except Exception:
+            eje_y_inicial = 0.0
+        self._alta(joy.get_name(), iid, joy, ctrl, eje_y_inicial)
 
-    def _alta(self, nombre, iid, joy=None, ctrl=None):
-        # Prueba unitaria: _alta("NOMBRE", instance_id) crea un mando sin hardware.
+    def _alta(self, nombre, iid, joy=None, ctrl=None, eje_y_offset=0.0):
         slot = next((i for i, m in enumerate(self.slots) if m is None), None)
         if slot is None:
             return None
-        m = Mando(nombre, iid, joy, ctrl)
+        m = Mando(nombre, iid, joy, ctrl, eje_y_offset)
         m.jugador = slot
         self.slots[slot] = m
         self._por_iid[iid] = m
@@ -230,13 +240,12 @@ class Mandos:
         m.acciones.append("nav_up" if d < 0 else "nav_down")
 
     def direccion(self, i):
-        # -1 arriba, 0 quieto, +1 abajo (analogico con zona muerta).
         if not (0 <= i < 2) or self.slots[i] is None:
             return 0.0
         m = self.slots[i]
         if m.dpad != 0:
             return float(m.dpad)
-        v = m.eje_y
+        v = m.eje_y - m.eje_y_offset
         a = abs(v)
         dz = config.MANDO_DEADZONE
         if a < dz:
